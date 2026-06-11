@@ -1,41 +1,37 @@
-"""ASCII banner rendering."""
+"""Original left-aligned ASCII banner."""
 
-from rich import box
-from rich.align import Align
-from rich.console import Group
-from rich.panel import Panel
 from rich.text import Text
 
 from . import __version__
 from .console import console
 
-_BANNER = r"""
+# Keep "| |" aligned with the rest of the art regardless of version length.
+_VER_LINE = f"dev-v{__version__}".rjust(18) + " | |"
+
+_ART = f"""\
                     _
-          dev-v{ver} | |
+{_VER_LINE}
  _ __   ___   ___  | |
-| '_ \ / _ \ / _ \ | |
+| '_ \\ / _ \\ / _ \\ | |
 | |A| | |W| | |S| || |
 | |_| | |_| | |_| || |
-| .__/ \___/ \___/ |_|
+| .__/ \\___/ \\___/ |_|
 | |         ~~DIVER 🤿
-|_|  HOW DEEP CAN I GO?
-""".format(ver=__version__)
+|_| HOW DEEP CAN I GO?"""
+
+_WAVES = (
+    "⎼─–─⎼⎼─–─⎼⎼─–─⎼⎼─–─⎼⎼─–─⎼\n"
+    "⎽⎼–⎻⎺⎺⎻–⎼⎽⎽⎼–⎻⎺⎺⎻–⎼⎽⎽⎼\n"
+    "``'-.,_,.-'``'-.,_,.='\n"
+    "-.,_,.='``'-.,_,.-'``'"
+)
 
 
 def print_banner() -> None:
-    """Render the PoolDiver banner panel to the shared console."""
-    art = Text(_BANNER, style="bold yellow")
-    art.highlight_words(["A", "W", "S"], "bold cyan")
-    subtitle = Text.assemble(
-        ("AWS Cognito Identity Pool Tester", "bold white"),
-        ("  •  ", "dim"),
-        ("@TheZakMan", "bold blue"),
-    )
-    console.print(
-        Panel(
-            Group(Align.center(art), Align.center(subtitle)),
-            box=box.DOUBLE,
-            border_style="cyan",
-            padding=(0, 4),
-        )
-    )
+    """Print the PoolDiver banner left-aligned to the shared console."""
+    art = Text(_ART, style="yellow")
+    art.highlight_words([f"dev-v{__version__}"], "white")
+    art.highlight_words(["HOW DEEP CAN I GO?"], "white")
+    console.print(art)
+    console.print(Text(_WAVES, style="cyan"))
+    console.print(Text("            @TheZakMan", style="bright_blue"))

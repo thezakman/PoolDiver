@@ -297,21 +297,8 @@ class ServiceTester:
                 f.write(f"- {s}: {tag} ({self.findings.get(s, '')})\n")
         self.log.good(f"Summary report saved to {summary_file}")
 
-        self._print_summary_table(accessible, total, duration)
-        return json_file
-
-    def _print_summary_table(self, accessible: int, total: int, duration: float) -> None:
-        table = Table(box=box.MINIMAL_DOUBLE_HEAD, title="Scan Complete",
-                      title_style="bold cyan", expand=True)
-        table.add_column("Service", style="bold white")
-        table.add_column("Result")
-        table.add_column("Findings", style="cyan")
-        for s in self.order:
-            st = self.status.get(s, "pending")
-            label, style = self._STATUS_CELL.get(st, ("running", "cyan"))
-            table.add_row(self.LABELS.get(s, s), Text(label, style=style),
-                          self.findings.get(s, ""))
-        console.print(table)
+        # The live probe table is already on screen (transient=False); just
+        # print a concise one-line verdict instead of repeating the table.
         if accessible:
             console.print(
                 f"[bold green]✓ {accessible}/{total} services accessible[/] "
@@ -320,3 +307,4 @@ class ServiceTester:
         else:
             console.print(f"[bold red]✗ No accessible services found[/] "
                           f"[dim]in {duration:.2f}s[/]")
+        return json_file

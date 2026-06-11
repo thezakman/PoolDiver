@@ -10,7 +10,7 @@ from typing import List, Optional
 # Services PoolDiver knows how to probe. Keep in sync with ServiceTester._probes.
 SUPPORTED_SERVICES: List[str] = [
     "s3", "ec2", "lambda", "dynamodb", "iam", "ssm",
-    "secretsmanager", "sqs", "sns", "rds",
+    "secretsmanager", "sqs", "sns", "rds", "cognito-identity",
 ]
 
 ENUMERATE_IAM_ENV = "POOLDIVER_ENUMERATE_IAM"
@@ -29,6 +29,10 @@ class Config:
     services: List[str] = field(default_factory=lambda: list(SUPPORTED_SERVICES))
     # Target S3 buckets for prefix enumeration (when list_buckets is denied).
     s3_buckets: List[str] = field(default_factory=list)
+    # Intrusive: attempt an S3 write (put_object) to prove upload access.
+    s3_write: bool = False
+    # The Cognito Identity Pool ID under test (for cognito-identity probes).
+    identity_pool: Optional[str] = None
 
     def ensure_dirs(self) -> None:
         self.output_dir.mkdir(parents=True, exist_ok=True)

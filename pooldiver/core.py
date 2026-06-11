@@ -86,10 +86,15 @@ class PoolDiver:
                     "Tip: pass [bold]--bucket <name>[/] to enumerate S3 "
                     "public/protected/private prefixes when list_buckets is denied"
                 )
+            if self.config.s3_write:
+                self.log.warn("S3 write test enabled (--s3-write): will upload a "
+                              "throwaway object to writable prefixes")
             tester = ServiceTester(
                 session, self.log, self.config.max_workers,
                 identity_id=creds.identity_id,
+                identity_pool=self.config.identity_pool,
                 s3_buckets=self.config.s3_buckets,
+                s3_write=self.config.s3_write,
             )
             tester.run(self.config.services)
             tester.save_results(self.config.output_dir)

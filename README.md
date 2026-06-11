@@ -70,6 +70,28 @@ standard Amplify prefixes on each target bucket:
 
 Pass the bucket name(s) with `--bucket` (find it in the app's `aws-exports.js`
 / `amplifyconfiguration.json`). The identity id is substituted automatically.
+For each readable prefix, PoolDiver also confirms `s3:GetObject` (distinct from
+`ListBucket`) with a `HeadObject` on the first key.
+
+Don't know the bucket? Let PoolDiver pull it from the app config:
+
+```bash
+pooldiver -r us-east-1 -id us-east-1:0000...0000 -t \
+  --app-config https://app.example.com/aws-exports.js
+```
+
+To also test **write** access (uploads a throwaway object, then deletes it —
+**intrusive, authorized targets only**):
+
+```bash
+pooldiver -r us-east-1 -id us-east-1:0000...0000 -t -b my-bucket --s3-write
+```
+
+### Cognito Identity Pool probing
+
+PoolDiver also probes the pool itself (`cognito-identity`): it tries
+`describe_identity_pool` and `list_identities` — the latter can enumerate other
+users' identity IDs (an IDOR-style finding) when the pool is misconfigured.
 
 ### Options
 
@@ -80,6 +102,8 @@ Pass the bucket name(s) with `--bucket` (find it in the app's `aws-exports.js`
 | `-t`, `--test` | Run AWS service permission tests |
 | `-s`, `--services` | Comma-separated services to test (default: all) |
 | `-b`, `--bucket` | S3 bucket(s) to enumerate for Amplify prefixes |
+| `--app-config` | URL/path to aws-exports.js to auto-discover the S3 bucket |
+| `--s3-write` | **Intrusive**: prove S3 upload access with a throwaway object |
 | `--no-enumerate` | Skip running `enumerate-iam` |
 | `--enumerate-path` | Path to the `enumerate-iam` directory |
 | `--output` | Custom output directory for results |

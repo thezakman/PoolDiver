@@ -33,7 +33,7 @@ class ServiceTester:
     LABELS = {
         "s3": "S3", "ec2": "EC2", "lambda": "Lambda", "dynamodb": "DynamoDB",
         "iam": "IAM", "ssm": "SSM", "secretsmanager": "Secrets Manager",
-        "sqs": "SQS", "sns": "SNS", "rds": "RDS",
+        "sqs": "SQS", "sns": "SNS", "rds": "RDS", "cognito-identity": "Cognito",
     }
 
     _STATUS_CELL = {
@@ -48,12 +48,16 @@ class ServiceTester:
 
     def __init__(self, session: boto3.Session, log: Log, max_workers: int = 5,
                  identity_id: Optional[str] = None,
-                 s3_buckets: Optional[List[str]] = None) -> None:
+                 identity_pool: Optional[str] = None,
+                 s3_buckets: Optional[List[str]] = None,
+                 s3_write: bool = False) -> None:
         self.session = session
         self.log = log
         self.max_workers = max_workers
         self.identity_id = identity_id
+        self.identity_pool = identity_pool
         self.s3_buckets = list(s3_buckets or [])
+        self.s3_write = s3_write
         self.results: Dict[str, dict] = {}
         self.status: Dict[str, str] = {}     # service -> pending/running/granted/denied/error
         self.findings: Dict[str, str] = {}   # service -> short summary
@@ -69,6 +73,7 @@ class ServiceTester:
             "dynamodb": self._dynamodb, "iam": self._iam, "ssm": self._ssm,
             "secretsmanager": self._secretsmanager, "sqs": self._sqs,
             "sns": self._sns, "rds": self._rds,
+            "cognito-identity": self._cognito_identity,
         }
 
     def _s3(self) -> dict:
@@ -113,16 +118,102 @@ class ServiceTester:
                     errors.append(e)
                     continue
                 keys = [o["Key"] for o in resp.get("Contents", [])]
-                readable.setdefault(bucket, {})[prefix or "(root)"] = {
+                info = {
                     "key_count": resp.get("KeyCount", len(keys)),
                     "truncated": resp.get("IsTruncated", False),
                     "sample": keys[:10],
                 }
+                # Confirm s3:GetObject (distinct from ListBucket) on the first key.
+                if keys:
+                    try:
+                        head = c.head_object(Bucket=bucket, Key=keys[0])
+                        info["readable_object"] = {
+                            "key": keys[0],
+                            "size": head.get("ContentLength"),
+                            "content_type": head.get("ContentType"),
+                        }
+                    except ClientError as e:
+                        info["readable_object"] = {
+                            "key": keys[0], "error": e.response["Error"]["Code"]}
+                readable.setdefault(bucket, {})[prefix or "(root)"] = info
         if readable:
             result["readable_prefixes"] = readable
 
-        # list_buckets denied AND no prefix readable -> surface as denied.
-        if not isinstance(result["buckets"], list) and not readable and errors:
+        # 4. Optional, intrusive: prove write access with a throwaway object.
+        if self.s3_write:
+            result["writable_prefixes"] = self._s3_write_test(c, targets)
+
+        any_access = (isinstance(result["buckets"], list) or bool(readable)
+                      or any(p.get("wrote")
+                             for v in result.get("writable_prefixes", {}).values()
+                             for p in v.values()))
+        if not any_access and errors:
+            raise errors[0]
+        return result
+
+    def _s3_write_test(self, client, buckets: List[str]) -> Dict[str, dict]:
+        """Upload (and clean up) a marker object to prove s3:PutObject.
+
+        Intrusive: this creates an object in the target bucket. Gated behind
+        --s3-write. The marker is deleted afterwards on a best-effort basis.
+        """
+        prefixes = ["public/"]
+        if self.identity_id:
+            prefixes += [f"protected/{self.identity_id}/",
+                         f"private/{self.identity_id}/"]
+        marker = f"pooldiver-write-test-{int(time.time())}.txt"
+        body = b"PoolDiver authorized write test. Safe to delete.\n"
+
+        writable: Dict[str, dict] = {}
+        for bucket in buckets:
+            for prefix in prefixes:
+                key = prefix + marker
+                try:
+                    client.put_object(Bucket=bucket, Key=key, Body=body)
+                except ClientError as e:
+                    writable.setdefault(bucket, {})[prefix] = {
+                        "wrote": False, "error": e.response["Error"]["Code"]}
+                    continue
+                cleaned = False
+                try:
+                    client.delete_object(Bucket=bucket, Key=key)
+                    cleaned = True
+                except ClientError:
+                    cleaned = False
+                writable.setdefault(bucket, {})[prefix] = {
+                    "wrote": True, "key": key, "cleaned_up": cleaned}
+        return writable
+
+    def _cognito_identity(self) -> dict:
+        """Probe the identity pool itself: describe it and try to enumerate
+        other identities (an IDOR-style finding when allowed)."""
+        c = self.session.client("cognito-identity")
+        result: Dict[str, Any] = {}
+        errors: List[ClientError] = []
+
+        if not self.identity_pool:
+            result["note"] = "no identity pool id available"
+            return result
+
+        try:
+            pool = c.describe_identity_pool(IdentityPoolId=self.identity_pool)
+            result["pool"] = {
+                "name": pool.get("IdentityPoolName"),
+                "unauthenticated": pool.get("AllowUnauthenticatedIdentities"),
+                "classic_flow": pool.get("AllowClassicFlow"),
+            }
+        except ClientError as e:
+            errors.append(e)
+            result["describe_identity_pool"] = f"denied ({e.response['Error']['Code']})"
+
+        try:
+            ids = c.list_identities(IdentityPoolId=self.identity_pool, MaxResults=60)
+            result["identities"] = [i["IdentityId"] for i in ids.get("Identities", [])]
+        except ClientError as e:
+            errors.append(e)
+            result["list_identities"] = f"denied ({e.response['Error']['Code']})"
+
+        if "pool" not in result and "identities" not in result and errors:
             raise errors[0]
         return result
 
@@ -199,8 +290,27 @@ class ServiceTester:
             if readable:
                 n_pref = sum(len(v) for v in readable.values())
                 n_obj = sum(p["key_count"] for v in readable.values() for p in v.values())
-                parts.append(f"{n_pref} readable prefix{'es' if n_pref != 1 else ''}/"
-                             f"{n_obj} obj")
+                n_get = sum(1 for v in readable.values() for p in v.values()
+                            if isinstance(p.get("readable_object"), dict)
+                            and "error" not in p["readable_object"])
+                seg = f"{n_pref} readable prefix{'es' if n_pref != 1 else ''}/{n_obj} obj"
+                if n_get:
+                    seg += f" ({n_get} GET ok)"
+                parts.append(seg)
+            n_w = sum(1 for v in result.get("writable_prefixes", {}).values()
+                      for p in v.values() if p.get("wrote"))
+            if n_w:
+                parts.append(f"{n_w} WRITABLE")
+            return ", ".join(parts) if parts else "accessible"
+
+        if service == "cognito-identity":
+            parts = []
+            ids = result.get("identities")
+            if isinstance(ids, list):
+                n = len(ids)
+                parts.append(f"{n} identit{'y' if n == 1 else 'ies'}")
+            if "pool" in result:
+                parts.append("pool info")
             return ", ".join(parts) if parts else "accessible"
 
         counts = {

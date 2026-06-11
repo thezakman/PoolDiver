@@ -79,6 +79,7 @@ class PoolDiver:
         session = creds.boto_session()
 
         # Confirm what these credentials map to.
+        identity_arn: Optional[str] = None
         try:
             identity_arn = session.client("sts").get_caller_identity()["Arn"]
             self.log.good(f"Authenticated as: [bold]{identity_arn}[/]")
@@ -87,11 +88,22 @@ class PoolDiver:
 
         if test:
             self.log.info("Starting AWS service permission tests...")
+            # No bucket given? Guess likely names from the role ARN (MobileHub /
+            # Amplify follow predictable conventions) so prefix enumeration can
+            # still run without the user knowing the bucket up front.
             if "s3" in self.config.services and not self.config.s3_buckets:
-                self.log.info(
-                    "Tip: pass [bold]--bucket <name>[/] to enumerate S3 "
-                    "public/protected/private prefixes when list_buckets is denied"
-                )
+                guesses = self._candidate_buckets(identity_arn)
+                if guesses:
+                    self.log.info("Guessing S3 bucket(s) from role: "
+                                  f"[bold]{', '.join(guesses)}[/] "
+                                  "(use --bucket to override)")
+                    self.config.s3_buckets = guesses
+                else:
+                    self.log.info(
+                        "Tip: pass [bold]--bucket <name>[/] or [bold]--app-config "
+                        "<aws-exports.js>[/] to enumerate S3 public/protected/"
+                        "private prefixes when list_buckets is denied"
+                    )
             if self.config.s3_write:
                 self.log.warn("S3 write test enabled (--s3-write): will upload a "
                               "throwaway object to writable prefixes")
@@ -177,6 +189,38 @@ class PoolDiver:
         except OSError as e:
             self.log.error(f"Failed to run enumerate-iam: {e}")
             return None
+
+    @staticmethod
+    def _candidate_buckets(identity_arn: Optional[str]) -> List[str]:
+        """Guess likely S3 bucket names from the assumed-role ARN.
+
+        AWS MobileHub and Amplify name the user-files bucket predictably, so a
+        denied list_buckets doesn't have to be a dead end. These are guesses —
+        prefix probes against them simply fail (NoSuchBucket / AccessDenied) if
+        wrong. --bucket always overrides.
+        """
+        if not identity_arn:
+            return []
+        m = re.search(r"assumed-role/([^/]+)/", identity_arn)
+        if not m:
+            return []
+        role = m.group(1)
+        candidates: List[str] = []
+
+        # MobileHub: <project>_unauth_MOBILEHUB_<id> -> <project>-userfiles-mobilehub-<id>
+        mh = re.match(r"(?P<proj>.+?)_(?:un)?auth_MOBILEHUB_(?P<id>\d+)$", role, re.I)
+        if mh:
+            proj = mh.group("proj").lower()
+            candidates.append(f"{proj}-userfiles-mobilehub-{mh.group('id')}")
+
+        # Amplify: amplify-<app>-<env>-<id>-(un)authRole -> storage bucket varies;
+        # surface the app slug as a best-effort hint.
+        amp = re.match(r"amplify-(?P<app>.+?)-(?P<env>[^-]+)-\d+-(?:un)?authRole$",
+                       role, re.I)
+        if amp:
+            candidates.append(f"{amp.group('app').lower()}-storage-{amp.group('env').lower()}")
+
+        return candidates
 
     @staticmethod
     def _collect_finding(line: str, findings: List[str]) -> Optional[str]:

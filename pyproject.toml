@@ -24,6 +24,9 @@ dependencies = [
     "rich>=13.0",
 ]
 
+[project.optional-dependencies]
+test = ["pytest>=7", "moto[s3]>=5"]
+
 [project.urls]
 Homepage = "https://github.com/TheZakMan/PoolDiver"
 Repository = "https://github.com/TheZakMan/PoolDiver"

@@ -73,7 +73,10 @@ Pass the bucket name(s) with `--bucket` (find it in the app's `aws-exports.js`
 For each readable prefix, PoolDiver also confirms `s3:GetObject` (distinct from
 `ListBucket`) with a `HeadObject` on the first key.
 
-Don't know the bucket? Let PoolDiver pull it from the app config:
+Don't know the bucket? PoolDiver tries to **guess** it from the assumed-role
+ARN (MobileHub/Amplify name buckets predictably, e.g.
+`myapp_unauth_MOBILEHUB_123` → `myapp-userfiles-mobilehub-123`). You can also
+let it pull the exact name from the app config:
 
 ```bash
 pooldiver -r us-east-1 -id us-east-1:0000...0000 -t \

@@ -65,7 +65,7 @@ class PoolDiver:
 
     def run(self, *, region: str, identity: str, test: bool,
             no_enumerate: bool) -> None:
-        self.log.info(f"PoolDiver v{__version__} starting...")
+        #self.log.info(f"PoolDiver v{__version__} starting...")
 
         creds = self.get_pool_credentials(region, identity)
         self.log.good(f"Obtained credentials for identity: [bold]{creds.identity_id}[/]")

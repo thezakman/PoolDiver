@@ -21,9 +21,9 @@ _ART = f"""\
 
 _WAVES = (
     "⎼─–─⎼⎼─–─⎼⎼─–─⎼⎼─–─⎼⎼─–─⎼\n"
-    "⎽⎼–⎻⎺⎺⎻–⎼⎽⎽⎼–⎻⎺⎺⎻–⎼⎽⎽⎼\n"
-    "``'-.,_,.-'``'-.,_,.='\n"
-    "-.,_,.='``'-.,_,.-'``'"
+    "⎽⎼–⎻⎺⎺⎻–⎼⎽⎽⎼–⎻⎺⎺⎻–⎼⎽⎽⎼–⎻⎺\n"
+    "``'-.,_,.-'``'-.,_,.-'``'\n"
+    "-.,_,.='``'-.,_,.='``'-.,"
 )
 
 
@@ -34,4 +34,4 @@ def print_banner() -> None:
     art.highlight_words(["HOW DEEP CAN I GO?"], "white")
     console.print(art)
     console.print(Text(_WAVES, style="cyan"))
-    console.print(Text("            @TheZakMan", style="bright_blue"))
+    console.print(Text("               @TheZakMan", style="bright_blue"))

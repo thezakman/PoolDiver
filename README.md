@@ -34,13 +34,15 @@ pip install .          # add -e for an editable/dev install
 ```bash
 git clone https://github.com/TheZakMan/PoolDiver && cd PoolDiver
 pip install boto3 rich
-./PoolDiver.py --help
+python -m pooldiver --help
 ```
+
+> The original single-file version is kept under [`legacy/`](legacy/) for reference.
 
 ## Usage
 
 After a pip install, use the `pooldiver` command (equivalently
-`python -m pooldiver`, or `./PoolDiver.py` from a checkout):
+`python -m pooldiver` from a checkout):
 
 ```bash
 # Fetch credentials only

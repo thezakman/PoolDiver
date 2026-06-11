@@ -208,11 +208,15 @@ class PoolDiver:
         role = m.group(1)
         candidates: List[str] = []
 
-        # MobileHub: <project>_unauth_MOBILEHUB_<id> -> <project>-userfiles-mobilehub-<id>
+        # MobileHub: <project>_unauth_MOBILEHUB_<id> provisions three buckets
+        # (userfiles / deployments / hosting) sharing the same id. Try all —
+        # deployments/hosting often expose a manifest naming the real buckets.
         mh = re.match(r"(?P<proj>.+?)_(?:un)?auth_MOBILEHUB_(?P<id>\d+)$", role, re.I)
         if mh:
             proj = mh.group("proj").lower()
-            candidates.append(f"{proj}-userfiles-mobilehub-{mh.group('id')}")
+            pid = mh.group("id")
+            candidates += [f"{proj}-{kind}-mobilehub-{pid}"
+                           for kind in ("userfiles", "deployments", "hosting")]
 
         # Amplify: amplify-<app>-<env>-<id>-(un)authRole -> storage bucket varies;
         # surface the app slug as a best-effort hint.

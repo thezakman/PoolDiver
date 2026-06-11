@@ -87,7 +87,10 @@ def test_candidate_buckets_from_mobilehub_role():
     arn = ("arn:aws:sts::574177866690:assumed-role/"
            "personalhealth_unauth_MOBILEHUB_727385483/CognitoIdentityCredentials")
     assert PoolDiver._candidate_buckets(arn) == [
-        "personalhealth-userfiles-mobilehub-727385483"]
+        "personalhealth-userfiles-mobilehub-727385483",
+        "personalhealth-deployments-mobilehub-727385483",
+        "personalhealth-hosting-mobilehub-727385483",
+    ]
     assert PoolDiver._candidate_buckets(None) == []
     assert PoolDiver._candidate_buckets("arn:aws:iam::1:user/bob") == []
 

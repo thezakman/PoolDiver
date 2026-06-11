@@ -29,6 +29,8 @@ class Config:
     services: List[str] = field(default_factory=lambda: list(SUPPORTED_SERVICES))
     # Target S3 buckets for prefix enumeration (when list_buckets is denied).
     s3_buckets: List[str] = field(default_factory=list)
+    # List every object in readable prefixes (full pagination), not a sample.
+    s3_list: bool = False
     # Intrusive: attempt an S3 write (put_object) to prove upload access.
     s3_write: bool = False
     # The Cognito Identity Pool ID under test (for cognito-identity probes).

@@ -112,6 +112,7 @@ class PoolDiver:
                 identity_id=creds.identity_id,
                 identity_pool=self.config.identity_pool,
                 s3_buckets=self.config.s3_buckets,
+                s3_list=self.config.s3_list,
                 s3_write=self.config.s3_write,
             )
             tester.run(self.config.services)

@@ -45,11 +45,14 @@ class ServiceTester:
 
     # Amplify/Cognito S3 convention: access is scoped to these key prefixes.
     S3_PREFIXES = ("", "public/", "protected/", "private/")
+    S3_SAMPLE = 25       # keys fetched per prefix by default
+    S3_LIST_CAP = 5000   # safety cap when --s3-list paginates everything
 
     def __init__(self, session: boto3.Session, log: Log, max_workers: int = 5,
                  identity_id: Optional[str] = None,
                  identity_pool: Optional[str] = None,
                  s3_buckets: Optional[List[str]] = None,
+                 s3_list: bool = False,
                  s3_write: bool = False) -> None:
         self.session = session
         self.log = log
@@ -57,6 +60,7 @@ class ServiceTester:
         self.identity_id = identity_id
         self.identity_pool = identity_pool
         self.s3_buckets = list(s3_buckets or [])
+        self.s3_list = s3_list
         self.s3_write = s3_write
         self.results: Dict[str, dict] = {}
         self.status: Dict[str, str] = {}     # service -> pending/running/granted/denied/error
@@ -113,16 +117,17 @@ class ServiceTester:
         for bucket in targets:
             for prefix in prefixes:
                 try:
-                    resp = c.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=25)
+                    keys, truncated = self._list_prefix(c, bucket, prefix)
                 except ClientError as e:
                     errors.append(e)
                     continue
-                keys = [o["Key"] for o in resp.get("Contents", [])]
-                info = {
-                    "key_count": resp.get("KeyCount", len(keys)),
-                    "truncated": resp.get("IsTruncated", False),
+                info: Dict[str, Any] = {
+                    "key_count": len(keys),
+                    "truncated": truncated,
                     "sample": keys[:10],
                 }
+                if self.s3_list:
+                    info["keys"] = keys           # full object listing
                 # Confirm s3:GetObject (distinct from ListBucket) on the first key.
                 if keys:
                     try:
@@ -150,6 +155,26 @@ class ServiceTester:
         if not any_access and errors:
             raise errors[0]
         return result
+
+    def _list_prefix(self, client, bucket: str, prefix: str):
+        """List objects under a prefix; return (keys, truncated).
+
+        Default: a single page (S3_SAMPLE keys). With --s3-list: paginate the
+        whole prefix up to S3_LIST_CAP.
+        """
+        if not self.s3_list:
+            resp = client.list_objects_v2(
+                Bucket=bucket, Prefix=prefix, MaxKeys=self.S3_SAMPLE)
+            keys = [o["Key"] for o in resp.get("Contents", [])]
+            return keys, resp.get("IsTruncated", False)
+
+        keys: List[str] = []
+        paginator = client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(
+                Bucket=bucket, Prefix=prefix,
+                PaginationConfig={"MaxItems": self.S3_LIST_CAP}):
+            keys.extend(o["Key"] for o in page.get("Contents", []))
+        return keys, len(keys) >= self.S3_LIST_CAP
 
     def _s3_write_test(self, client, buckets: List[str]) -> Dict[str, dict]:
         """Upload (and clean up) a marker object to prove s3:PutObject.

@@ -71,7 +71,8 @@ standard Amplify prefixes on each target bucket:
 Pass the bucket name(s) with `--bucket` (find it in the app's `aws-exports.js`
 / `amplifyconfiguration.json`). The identity id is substituted automatically.
 For each readable prefix, PoolDiver also confirms `s3:GetObject` (distinct from
-`ListBucket`) with a `HeadObject` on the first key.
+`ListBucket`) with a `HeadObject` on the first key. By default it fetches a
+sample of keys per prefix; pass `--s3-list` to paginate and dump every object.
 
 Don't know the bucket? PoolDiver tries to **guess** it from the assumed-role
 ARN (MobileHub/Amplify name buckets predictably, e.g.
@@ -106,6 +107,7 @@ users' identity IDs (an IDOR-style finding) when the pool is misconfigured.
 | `-s`, `--services` | Comma-separated services to test (default: all) |
 | `-b`, `--bucket` | S3 bucket(s) to enumerate for Amplify prefixes |
 | `--app-config` | URL/path to aws-exports.js to auto-discover the S3 bucket |
+| `--s3-list` | List **all** objects in each readable prefix (full pagination) |
 | `--s3-write` | **Intrusive**: prove S3 upload access with a throwaway object |
 | `--no-enumerate` | Skip running `enumerate-iam` |
 | `--enumerate-path` | Path to the `enumerate-iam` directory |

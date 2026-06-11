@@ -56,6 +56,9 @@ For authorized security testing only.
     parser.add_argument("--app-config",
                         help="URL or local path to an Amplify aws-exports.js / "
                              "amplifyconfiguration.json to auto-discover the S3 bucket")
+    parser.add_argument("--s3-list", action="store_true",
+                        help="List ALL objects in each readable S3 prefix (full "
+                             "pagination) instead of just a sample")
     parser.add_argument("--s3-write", action="store_true",
                         help="INTRUSIVE: attempt an S3 put_object (and clean it up) "
                              "to prove upload access. Only with authorization.")
@@ -99,6 +102,7 @@ def build_config(args: argparse.Namespace) -> Config:
         config.services = [s for s in requested if s in SUPPORTED_SERVICES]
     config.identity_pool = args.identity
     config.s3_write = args.s3_write
+    config.s3_list = args.s3_list
     if args.bucket:
         config.s3_buckets = [b.strip() for b in args.bucket.split(",") if b.strip()]
     if args.app_config:

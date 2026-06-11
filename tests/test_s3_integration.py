@@ -90,3 +90,21 @@ def test_candidate_buckets_from_mobilehub_role():
         "personalhealth-userfiles-mobilehub-727385483"]
     assert PoolDiver._candidate_buckets(None) == []
     assert PoolDiver._candidate_buckets("arn:aws:iam::1:user/bob") == []
+
+
+@mock_aws
+def test_s3_list_paginates_all_objects(tmp_path):
+    s3 = boto3.client("s3", region_name="us-east-1")
+    s3.create_bucket(Bucket=BUCKET)
+    for i in range(60):                       # > S3_SAMPLE (25)
+        s3.put_object(Bucket=BUCKET, Key=f"public/file{i:03d}.txt", Body=b"x")
+
+    # default: sample only (capped at S3_SAMPLE)
+    sampled = _tester(tmp_path, s3_buckets=[BUCKET])._s3()
+    assert sampled["readable_prefixes"][BUCKET]["public/"]["key_count"] == 25
+
+    # --s3-list: full pagination returns everything, with the full key list
+    full = _tester(tmp_path, s3_buckets=[BUCKET], s3_list=True)._s3()
+    pub = full["readable_prefixes"][BUCKET]["public/"]
+    assert pub["key_count"] == 60
+    assert len(pub["keys"]) == 60

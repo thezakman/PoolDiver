@@ -22,6 +22,7 @@ from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.table import Table
 from rich.text import Text
+from rich.tree import Tree
 
 from .console import console
 from .logger import Log
@@ -511,4 +512,45 @@ class ServiceTester:
         else:
             console.print(f"[bold red]✗ No accessible services found[/] "
                           f"[dim]in {duration:.2f}s[/]")
+
+        self._print_s3_details()
         return json_file
+
+    def _print_s3_details(self) -> None:
+        """Show the actual S3 loot (prefixes + object keys), not just counts."""
+        s3 = self.results.get("s3")
+        if not isinstance(s3, dict):
+            return
+        readable = s3.get("readable_prefixes", {})
+        writable = s3.get("writable_prefixes", {})
+        if not readable and not writable:
+            return
+
+        tree = Tree(Text("S3 findings", style="bold cyan"))
+        for bucket, prefixes in readable.items():
+            bnode = tree.add(Text(bucket, style="bold white"))
+            for prefix, info in prefixes.items():
+                n = info["key_count"]
+                label = Text(prefix or "(root)", style="cyan")
+                label.append(f"  {n} object{'' if n == 1 else 's'}", style="white")
+                ro = info.get("readable_object")
+                if isinstance(ro, dict) and "error" not in ro:
+                    label.append("  · GET ok", style="green")
+                if info.get("truncated"):
+                    label.append("  · +more", style="yellow")
+                pnode = bnode.add(label)
+                keys = info.get("keys", info.get("sample", []))
+                for key in keys[:50]:
+                    pnode.add(Text(key, style="dim"))
+                if len(keys) > 50:
+                    pnode.add(Text(f"... (+{len(keys) - 50} more)", style="dim"))
+
+        for bucket, prefixes in writable.items():
+            wrote = [p for p, i in prefixes.items() if i.get("wrote")]
+            if not wrote:
+                continue
+            bnode = tree.add(Text(f"{bucket}  (WRITABLE)", style="bold red"))
+            for prefix in wrote:
+                bnode.add(Text(f"{prefix}  · put_object OK", style="red"))
+
+        console.print(tree)

@@ -7,7 +7,7 @@ or have written permission to assess.
     Author : @TheZakMan
 """
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
 __author__ = "TheZakMan"
 
 __all__ = ["__version__", "__author__"]

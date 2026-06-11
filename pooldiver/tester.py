@@ -8,7 +8,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 import boto3
 from botocore.exceptions import (
@@ -43,10 +43,17 @@ class ServiceTester:
         "error": ("⚠ error", "yellow"),
     }
 
-    def __init__(self, session: boto3.Session, log: Log, max_workers: int = 5) -> None:
+    # Amplify/Cognito S3 convention: access is scoped to these key prefixes.
+    S3_PREFIXES = ("", "public/", "protected/", "private/")
+
+    def __init__(self, session: boto3.Session, log: Log, max_workers: int = 5,
+                 identity_id: Optional[str] = None,
+                 s3_buckets: Optional[List[str]] = None) -> None:
         self.session = session
         self.log = log
         self.max_workers = max_workers
+        self.identity_id = identity_id
+        self.s3_buckets = list(s3_buckets or [])
         self.results: Dict[str, dict] = {}
         self.status: Dict[str, str] = {}     # service -> pending/running/granted/denied/error
         self.findings: Dict[str, str] = {}   # service -> short summary
@@ -65,11 +72,59 @@ class ServiceTester:
         }
 
     def _s3(self) -> dict:
+        """Probe S3 the way it actually fails for Cognito identities.
+
+        list_buckets is usually denied, so we also try listing the Amplify
+        prefixes (public/, protected/<identity>/, private/<identity>/) on each
+        target bucket (from list_buckets or --bucket).
+        """
         c = self.session.client("s3")
-        return {"buckets": [
-            {"name": b["Name"], "creation_date": str(b["CreationDate"])}
-            for b in c.list_buckets().get("Buckets", [])
-        ]}
+        result: Dict[str, Any] = {}
+        errors: List[ClientError] = []
+
+        # 1. Default probe: list every bucket (often denied).
+        try:
+            names = [b["Name"] for b in c.list_buckets().get("Buckets", [])]
+            result["buckets"] = names
+        except ClientError as e:
+            errors.append(e)
+            result["buckets"] = f"denied ({e.response['Error']['Code']})"
+            names = []
+
+        # 2. Decide which buckets to probe: user-supplied first, then listed.
+        targets = list(dict.fromkeys([*self.s3_buckets, *names]))
+        if not targets:
+            if errors:
+                raise errors[0]          # nothing accessible -> denied
+            return result
+
+        # 3. Probe Amplify-style prefixes, expanding identity-scoped ones.
+        prefixes = list(self.S3_PREFIXES)
+        if self.identity_id:
+            prefixes += [f"protected/{self.identity_id}/",
+                         f"private/{self.identity_id}/"]
+
+        readable: Dict[str, dict] = {}
+        for bucket in targets:
+            for prefix in prefixes:
+                try:
+                    resp = c.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=25)
+                except ClientError as e:
+                    errors.append(e)
+                    continue
+                keys = [o["Key"] for o in resp.get("Contents", [])]
+                readable.setdefault(bucket, {})[prefix or "(root)"] = {
+                    "key_count": resp.get("KeyCount", len(keys)),
+                    "truncated": resp.get("IsTruncated", False),
+                    "sample": keys[:10],
+                }
+        if readable:
+            result["readable_prefixes"] = readable
+
+        # list_buckets denied AND no prefix readable -> surface as denied.
+        if not isinstance(result["buckets"], list) and not readable and errors:
+            raise errors[0]
+        return result
 
     def _ec2(self) -> dict:
         c = self.session.client("ec2")
@@ -135,8 +190,20 @@ class ServiceTester:
         def plural(n: int, noun: str) -> str:
             return f"{n} {noun}{'' if n == 1 else 's'}"
 
+        if service == "s3":
+            parts = []
+            buckets = result.get("buckets")
+            if isinstance(buckets, list):
+                parts.append(plural(len(buckets), "bucket"))
+            readable = result.get("readable_prefixes", {})
+            if readable:
+                n_pref = sum(len(v) for v in readable.values())
+                n_obj = sum(p["key_count"] for v in readable.values() for p in v.values())
+                parts.append(f"{n_pref} readable prefix{'es' if n_pref != 1 else ''}/"
+                             f"{n_obj} obj")
+            return ", ".join(parts) if parts else "accessible"
+
         counts = {
-            "s3": ("buckets", "bucket"),
             "ec2": ("instances", "instance"),
             "lambda": ("functions", "function"),
             "dynamodb": ("tables", "table"),

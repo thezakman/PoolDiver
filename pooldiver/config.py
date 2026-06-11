@@ -27,6 +27,8 @@ class Config:
     credentials_dir: Path = Path("output/credentials")
     max_workers: int = 5
     services: List[str] = field(default_factory=lambda: list(SUPPORTED_SERVICES))
+    # Target S3 buckets for prefix enumeration (when list_buckets is denied).
+    s3_buckets: List[str] = field(default_factory=list)
 
     def ensure_dirs(self) -> None:
         self.output_dir.mkdir(parents=True, exist_ok=True)

@@ -49,6 +49,10 @@ For authorized security testing only.
     parser.add_argument("-s", "--services",
                         help=f"Comma-separated services to test "
                              f"(default: all). Supported: {', '.join(SUPPORTED_SERVICES)}")
+    parser.add_argument("-b", "--bucket",
+                        help="Comma-separated S3 bucket name(s) to enumerate for "
+                             "Amplify prefixes (public/, protected/<id>/, "
+                             "private/<id>/) when list_buckets is denied")
     parser.add_argument("--no-enumerate", action="store_true",
                         help="Skip running enumerate-iam")
     parser.add_argument("--enumerate-path",
@@ -87,6 +91,8 @@ def build_config(args: argparse.Namespace) -> Config:
                 f"(supported: {', '.join(SUPPORTED_SERVICES)})[/]"
             )
         config.services = [s for s in requested if s in SUPPORTED_SERVICES]
+    if args.bucket:
+        config.s3_buckets = [b.strip() for b in args.bucket.split(",") if b.strip()]
     if args.output:
         config.output_dir = Path(args.output)
     config.enumerate_iam_path = (

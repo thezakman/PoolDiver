@@ -53,7 +53,23 @@ pooldiver -r us-east-1 -id us-east-1:0000...0000 -t
 
 # Probe a specific subset of services
 pooldiver -r us-east-1 -id us-east-1:0000...0000 -t -s s3,ec2,lambda
+
+# Enumerate S3 Amplify prefixes on a known bucket (when list_buckets is denied)
+pooldiver -r us-east-1 -id us-east-1:0000...0000 -t -b my-amplify-bucket
 ```
+
+### S3 enumeration for Cognito/Amplify
+
+For Cognito-backed apps, `s3:ListAllMyBuckets` (`list_buckets`) is almost always
+denied — access is scoped to per-prefix paths. PoolDiver therefore also lists the
+standard Amplify prefixes on each target bucket:
+
+- `public/`
+- `protected/<identity-id>/`
+- `private/<identity-id>/`
+
+Pass the bucket name(s) with `--bucket` (find it in the app's `aws-exports.js`
+/ `amplifyconfiguration.json`). The identity id is substituted automatically.
 
 ### Options
 
@@ -63,6 +79,7 @@ pooldiver -r us-east-1 -id us-east-1:0000...0000 -t -s s3,ec2,lambda
 | `-id`, `--identity` | Cognito Identity Pool ID (required) |
 | `-t`, `--test` | Run AWS service permission tests |
 | `-s`, `--services` | Comma-separated services to test (default: all) |
+| `-b`, `--bucket` | S3 bucket(s) to enumerate for Amplify prefixes |
 | `--no-enumerate` | Skip running `enumerate-iam` |
 | `--enumerate-path` | Path to the `enumerate-iam` directory |
 | `--output` | Custom output directory for results |

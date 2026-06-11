@@ -81,7 +81,16 @@ class PoolDiver:
 
         if test:
             self.log.info("Starting AWS service permission tests...")
-            tester = ServiceTester(session, self.log, self.config.max_workers)
+            if "s3" in self.config.services and not self.config.s3_buckets:
+                self.log.info(
+                    "Tip: pass [bold]--bucket <name>[/] to enumerate S3 "
+                    "public/protected/private prefixes when list_buckets is denied"
+                )
+            tester = ServiceTester(
+                session, self.log, self.config.max_workers,
+                identity_id=creds.identity_id,
+                s3_buckets=self.config.s3_buckets,
+            )
             tester.run(self.config.services)
             tester.save_results(self.config.output_dir)
 

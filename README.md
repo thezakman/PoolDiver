@@ -128,6 +128,12 @@ pooldiver -r us-east-1 -id us-east-1:0000...0000 -t
 Resolution order: `--enumerate-path` → `POOLDIVER_ENUMERATE_IAM` → bundled copy
 → common locations (`~/Toolz/enumerate-iam`, `~/tools/enumerate-iam`, …).
 
+While it runs, PoolDiver shows a live status bar (spinner, calls tested,
+findings, elapsed time and current action) and prints each working call as it
+is discovered, then a summary. Pass `-v`/`--verbose` to stream the full raw
+enumerate-iam output instead (useful for debugging). Everything is also written
+to `output/results/enumerate_iam_output_*.txt`.
+
 > The bundled `enumerate-iam` is **GPLv3** (its license is preserved in
 > `pooldiver/_vendor/enumerate-iam/LICENSE`); PoolDiver itself is Apache 2.0.
 > See [`pooldiver/_vendor/README.md`](pooldiver/_vendor/README.md).

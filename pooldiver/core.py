@@ -6,14 +6,18 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import IO, List, Optional
 
 import boto3
 from botocore import UNSIGNED
 from botocore.config import Config as BotoConfig
 from botocore.exceptions import BotoCoreError, ClientError
+from rich.live import Live
+from rich.spinner import Spinner
+from rich.text import Text
 
 from . import __version__
 from .config import Config
@@ -145,14 +149,10 @@ class PoolDiver:
                 proc = subprocess.Popen(
                     cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 )
-                for raw in iter(proc.stdout.readline, b""):
-                    line = raw.decode("utf-8", errors="replace").rstrip()
-                    self._echo_enum_line(line)
-                    if "worked!" in line.lower():
-                        m = re.search(r"--\s*([\w.\-]+\([^)]*\))\s*worked", line)
-                        findings.append(m.group(1) if m else line.strip())
-                    f.write(line + "\n")
-                    f.flush()
+                if self.log.verbose:
+                    self._stream_verbose(proc, f, findings)   # -v: raw stream
+                else:
+                    self._stream_status(proc, f, findings)    # live status bar
                 proc.wait()
             console.rule("[cyan]end of enumerate-iam output")
 
@@ -176,6 +176,65 @@ class PoolDiver:
         except OSError as e:
             self.log.error(f"Failed to run enumerate-iam: {e}")
             return None
+
+    @staticmethod
+    def _collect_finding(line: str, findings: List[str]) -> Optional[str]:
+        """Record a 'worked!' line as a finding; return the parsed action."""
+        if "worked!" not in line.lower():
+            return None
+        m = re.search(r"--\s*([\w.\-]+\([^)]*\))\s*worked", line)
+        action = m.group(1) if m else line.strip()
+        findings.append(action)
+        return action
+
+    def _stream_verbose(self, proc: subprocess.Popen, f: "IO[str]",
+                        findings: List[str]) -> None:
+        """Echo every enumerate-iam line (used with -v for debugging hangs)."""
+        for raw in iter(proc.stdout.readline, b""):
+            line = raw.decode("utf-8", errors="replace").rstrip()
+            self._echo_enum_line(line)
+            self._collect_finding(line, findings)
+            f.write(line + "\n")
+            f.flush()
+
+    def _stream_status(self, proc: subprocess.Popen, f: "IO[str]",
+                       findings: List[str]) -> None:
+        """Show a live status bar while enumerate-iam runs.
+
+        Findings print as they appear; the spinner keeps animating during long
+        stalls (rich auto-refreshes on a background thread) so it's obvious the
+        run is alive and when it finishes. Raw output still goes to the file.
+        """
+        start = time.monotonic()
+        state = {"tested": 0, "current": "starting…"}
+
+        def render() -> Spinner:
+            mm, ss = divmod(int(time.monotonic() - start), 60)
+            txt = Text.assemble(
+                ("enumerate-iam  ", "bold cyan"),
+                (f"{state['tested']} tested ", "white"), ("· ", "dim"),
+                (f"{len(findings)} found ", "green"), ("· ", "dim"),
+                (f"{mm:02d}:{ss:02d} ", "yellow"), ("· ", "dim"),
+                (state["current"][:48], "cyan"),
+            )
+            return Spinner("dots", text=txt, style="cyan")
+
+        with Live(render(), console=console, refresh_per_second=12,
+                  transient=True) as live:
+            for raw in iter(proc.stdout.readline, b""):
+                line = raw.decode("utf-8", errors="replace").rstrip()
+                f.write(line + "\n")
+                f.flush()
+                state["tested"] += 1
+                found = self._collect_finding(line, findings)
+                if found:
+                    console.print(Text(f"  ✓ {found}", style="bold green"))
+                    state["current"] = found
+                else:
+                    m = re.search(r"Remove ([\w.\-]+) action", line)
+                    if m:
+                        state["current"] = m.group(1)
+                live.update(render())
 
     @staticmethod
     def _echo_enum_line(line: str) -> None:

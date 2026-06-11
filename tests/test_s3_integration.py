@@ -111,3 +111,54 @@ def test_s3_list_paginates_all_objects(tmp_path):
     pub = full["readable_prefixes"][BUCKET]["public/"]
     assert pub["key_count"] == 60
     assert len(pub["keys"]) == 60
+
+
+class _DenyListBuckets:
+    """Wrap an s3 client so list_buckets is denied (as it is for Cognito)."""
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+    def list_buckets(self, *a, **k):
+        from botocore.exceptions import ClientError
+        raise ClientError({"Error": {"Code": "AccessDenied"}}, "ListBuckets")
+
+
+class _DenySession:
+    def __init__(self, inner):
+        self._inner = inner
+
+    def client(self, name, *a, **k):
+        c = self._inner.client(name, *a, **k)
+        return _DenyListBuckets(c) if name == "s3" else c
+
+
+@mock_aws
+def test_discovers_real_bucket_from_config_object(tmp_path):
+    """A readable deployments bucket whose manifest names the real userfiles
+    bucket should get that bucket discovered and probed automatically."""
+    s3 = boto3.client("s3", region_name="us-east-1")
+    deployments = "guessed-deployments-mobilehub-1"
+    real_userfiles = "realapp-userfiles-mobilehub-999000111"
+    s3.create_bucket(Bucket=deployments)
+    s3.create_bucket(Bucket=real_userfiles)
+    s3.put_object(
+        Bucket=deployments, Key="mobile-hub-project.yml",
+        Body=b"attributes:\n  user-files-bucket-name: realapp-userfiles-mobilehub-999000111\n",
+    )
+    s3.put_object(Bucket=real_userfiles, Key="public/loot.txt", Body=b"secret")
+
+    # list_buckets denied; we only know the deployments bucket. The userfiles
+    # one must be discovered from the manifest and probed.
+    log = Log(tmp_path / "t.log")
+    session = _DenySession(boto3.Session(region_name="us-east-1"))
+    tester = ServiceTester(session, log, identity_id=IDENTITY,
+                           s3_buckets=[deployments])
+    res = tester._s3()
+
+    assert real_userfiles in res.get("discovered_buckets", [])
+    assert real_userfiles in res["readable_prefixes"]
+    assert res["readable_prefixes"][real_userfiles]["public/"]["key_count"] == 1

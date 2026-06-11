@@ -48,6 +48,9 @@ class ServiceTester:
     S3_PREFIXES = ("", "public/", "protected/", "private/")
     S3_SAMPLE = 25       # keys fetched per prefix by default
     S3_LIST_CAP = 5000   # safety cap when --s3-list paginates everything
+    # Config objects that name the real backend buckets.
+    CONFIG_NAMES = ("aws-exports.js", "amplifyconfiguration.json",
+                    "mobile-hub-project.yml", "mobile-hub-project.json")
 
     def __init__(self, session: boto3.Session, log: Log, max_workers: int = 5,
                  identity_id: Optional[str] = None,
@@ -116,38 +119,24 @@ class ServiceTester:
 
         readable: Dict[str, dict] = {}
         for bucket in targets:
-            for prefix in prefixes:
-                try:
-                    keys, truncated = self._list_prefix(c, bucket, prefix)
-                except ClientError as e:
-                    errors.append(e)
-                    continue
-                info: Dict[str, Any] = {
-                    "key_count": len(keys),
-                    "truncated": truncated,
-                    "sample": keys[:10],
-                }
-                if self.s3_list:
-                    info["keys"] = keys           # full object listing
-                # Confirm s3:GetObject (distinct from ListBucket) on the first key.
-                if keys:
-                    try:
-                        head = c.head_object(Bucket=bucket, Key=keys[0])
-                        info["readable_object"] = {
-                            "key": keys[0],
-                            "size": head.get("ContentLength"),
-                            "content_type": head.get("ContentType"),
-                        }
-                    except ClientError as e:
-                        info["readable_object"] = {
-                            "key": keys[0], "error": e.response["Error"]["Code"]}
-                readable.setdefault(bucket, {})[prefix or "(root)"] = info
+            self._probe_prefixes(c, bucket, prefixes, readable, errors)
+
+        # 4. Auto-discover the REAL bucket names from any readable config object
+        #    (aws-exports.js / amplifyconfiguration.json / mobile-hub-project.*),
+        #    then probe those too — closes the gap when names were only guessed.
+        discovered = self._discover_buckets_from_objects(c, readable)
+        new_buckets = [b for b in discovered if b not in targets]
+        if new_buckets:
+            result["discovered_buckets"] = new_buckets
+            for bucket in new_buckets:
+                self._probe_prefixes(c, bucket, prefixes, readable, errors)
+
         if readable:
             result["readable_prefixes"] = readable
 
-        # 4. Optional, intrusive: prove write access with a throwaway object.
+        # 5. Optional, intrusive: prove write access with a throwaway object.
         if self.s3_write:
-            result["writable_prefixes"] = self._s3_write_test(c, targets)
+            result["writable_prefixes"] = self._s3_write_test(c, targets + new_buckets)
 
         any_access = (isinstance(result["buckets"], list) or bool(readable)
                       or any(p.get("wrote")
@@ -156,6 +145,58 @@ class ServiceTester:
         if not any_access and errors:
             raise errors[0]
         return result
+
+    def _probe_prefixes(self, client, bucket: str, prefixes: List[str],
+                        readable: Dict[str, dict], errors: List) -> None:
+        """List each prefix on a bucket and confirm read, recording into readable."""
+        for prefix in prefixes:
+            try:
+                keys, truncated = self._list_prefix(client, bucket, prefix)
+            except ClientError as e:
+                errors.append(e)
+                continue
+            info: Dict[str, Any] = {
+                "key_count": len(keys),
+                "truncated": truncated,
+                "sample": keys[:10],
+            }
+            if self.s3_list:
+                info["keys"] = keys           # full object listing
+            # Confirm s3:GetObject (distinct from ListBucket) on the first key.
+            if keys:
+                try:
+                    head = client.head_object(Bucket=bucket, Key=keys[0])
+                    info["readable_object"] = {
+                        "key": keys[0],
+                        "size": head.get("ContentLength"),
+                        "content_type": head.get("ContentType"),
+                    }
+                except ClientError as e:
+                    info["readable_object"] = {
+                        "key": keys[0], "error": e.response["Error"]["Code"]}
+            readable.setdefault(bucket, {})[prefix or "(root)"] = info
+
+    def _discover_buckets_from_objects(self, client,
+                                       readable: Dict[str, dict]) -> List[str]:
+        """Read config objects found in readable prefixes and extract the real
+        bucket names they reference."""
+        from .discovery import extract_buckets_from_text
+
+        found: List[str] = []
+        for bucket, prefixes in readable.items():
+            for info in prefixes.values():
+                for key in info.get("keys", info.get("sample", [])):
+                    if key.rsplit("/", 1)[-1].lower() not in self.CONFIG_NAMES:
+                        continue
+                    try:
+                        body = client.get_object(
+                            Bucket=bucket, Key=key)["Body"].read(1_000_000)
+                    except ClientError:
+                        continue
+                    for b in extract_buckets_from_text(body.decode("utf-8", "replace")):
+                        if b not in found:
+                            found.append(b)
+        return found
 
     def _list_prefix(self, client, bucket: str, prefix: str):
         """List objects under a prefix; return (keys, truncated).
@@ -327,6 +368,9 @@ class ServiceTester:
                       for p in v.values() if p.get("wrote"))
             if n_w:
                 parts.append(f"{n_w} WRITABLE")
+            n_disc = len(result.get("discovered_buckets", []))
+            if n_disc:
+                parts.append(f"+{n_disc} discovered bucket{'' if n_disc == 1 else 's'}")
             return ", ".join(parts) if parts else "accessible"
 
         if service == "cognito-identity":
@@ -526,9 +570,13 @@ class ServiceTester:
         if not readable and not writable:
             return
 
+        discovered = set(s3.get("discovered_buckets", []))
         tree = Tree(Text("S3 findings", style="bold cyan"))
         for bucket, prefixes in readable.items():
-            bnode = tree.add(Text(bucket, style="bold white"))
+            label = Text(bucket, style="bold white")
+            if bucket in discovered:
+                label.append("  (discovered)", style="magenta")
+            bnode = tree.add(label)
             for prefix, info in prefixes.items():
                 n = info["key_count"]
                 label = Text(prefix or "(root)", style="cyan")

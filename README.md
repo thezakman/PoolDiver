@@ -139,6 +139,16 @@ is discovered, then a summary. Pass `-v`/`--verbose` to stream the full raw
 enumerate-iam output instead (useful for debugging). Everything is also written
 to `output/results/enumerate_iam_output_*.txt`.
 
+### Automatic bucket-name discovery
+
+When `list_buckets` is denied, PoolDiver guesses likely bucket names from the
+role ARN. If one of those (e.g. a MobileHub `deployments`/`hosting` bucket) is
+readable and contains an app config (`aws-exports.js`,
+`amplifyconfiguration.json`, `mobile-hub-project.yml`), PoolDiver downloads it,
+extracts the **real** bucket names it references, and probes those too — so you
+get the actual buckets, not just guesses. Discovered buckets are flagged in the
+findings tree.
+
 > The bundled `enumerate-iam` is **GPLv3** (its license is preserved in
 > `pooldiver/_vendor/enumerate-iam/LICENSE`); PoolDiver itself is Apache 2.0.
 > See [`pooldiver/_vendor/README.md`](pooldiver/_vendor/README.md).

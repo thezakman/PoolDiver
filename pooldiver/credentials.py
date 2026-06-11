@@ -19,6 +19,7 @@ class AWSCredentials:
     identity_id: str
     region: str
     expiration: Optional[datetime] = None
+    identity_pool: Optional[str] = None  # the pool these creds were obtained from
 
     def is_expired(self) -> bool:
         if self.expiration is None:
@@ -31,6 +32,7 @@ class AWSCredentials:
             "AccessKeyId": self.access_key,
             "SecretAccessKey": self.secret_key,
             "SessionToken": self.session_token,
+            "IdentityPoolId": self.identity_pool,
             "IdentityId": self.identity_id,
             "Region": self.region,
             "Expiration": self.expiration.isoformat() if self.expiration else None,

@@ -59,6 +59,7 @@ class PoolDiver:
             identity_id=identity_id,
             region=region,
             expiration=c.get("Expiration"),
+            identity_pool=identity_pool,
         )
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

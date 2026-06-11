@@ -449,6 +449,8 @@ class ServiceTester:
 
         payload = dict(self.results)
         payload["summary"] = {
+            "identity_pool": self.identity_pool,
+            "identity_id": self.identity_id,
             "tested_services": total,
             "accessible_services": accessible,
             "scan_duration": f"{duration:.2f}s",

@@ -160,13 +160,17 @@ cython_debug/
 #.idea/
 
 # === PoolDiver: sensitive output & generated data ===
-# Extracted AWS credentials — NEVER commit these
-credentials/
-# Scan results and reports
-pool_diver_results/
-# Runtime logs
-pooldiver_output.log
+# All runtime artifacts (extracted credentials, scan results, logs) live here.
+# NEVER commit these.
+output/
 *.log
+# Legacy locations (pre-output/ consolidation)
+credentials/
+pool_diver_results/
+pooldiver_output.log
+
+# Local Claude Code settings
+.claude/
 
 # macOS
 .DS_Store

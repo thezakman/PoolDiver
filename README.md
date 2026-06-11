@@ -93,14 +93,16 @@ Resolution order: `--enumerate-path` → `POOLDIVER_ENUMERATE_IAM` → bundled c
 
 ## Output
 
-Everything is written under the working directory:
+All generated artifacts are written under a single `output/` directory in the
+working directory:
 
-- `credentials/` — extracted credentials (JSON, one file per identity)
-- `pool_diver_results/` — scan results (JSON), summary reports (TXT) and
+- `output/credentials/` — extracted credentials (JSON, one file per identity)
+- `output/results/` — scan results (JSON), summary reports (TXT) and
   `enumerate-iam` output
-- `pooldiver_output.log` — session audit log
+- `output/pooldiver_output.log` — session audit log
 
-These directories contain **sensitive data** and are git-ignored by default.
+`output/` contains **sensitive data** and is git-ignored by default.
+Use `--output <dir>` to redirect scan results elsewhere.
 
 ## Manual equivalent
 

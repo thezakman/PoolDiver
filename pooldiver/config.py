@@ -20,16 +20,18 @@ ENUMERATE_IAM_ENV = "POOLDIVER_ENUMERATE_IAM"
 class Config:
     """Runtime configuration, populated from CLI args and environment."""
 
+    # All generated artifacts live under a single output/ directory.
     enumerate_iam_path: Optional[Path] = None
-    log_file: Path = Path("pooldiver_output.log")
-    output_dir: Path = Path("pool_diver_results")
-    credentials_dir: Path = Path("credentials")
+    log_file: Path = Path("output/pooldiver_output.log")
+    output_dir: Path = Path("output/results")
+    credentials_dir: Path = Path("output/credentials")
     max_workers: int = 5
     services: List[str] = field(default_factory=lambda: list(SUPPORTED_SERVICES))
 
     def ensure_dirs(self) -> None:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.credentials_dir.mkdir(parents=True, exist_ok=True)
+        self.log_file.parent.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def default_enumerate_path() -> Optional[Path]:

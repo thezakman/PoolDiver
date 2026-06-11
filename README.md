@@ -18,25 +18,39 @@ enumeration.
 
 ## Install
 
+Requires Python 3.9+.
+
+**Globally, with pip** (exposes the `pooldiver` command):
+
 ```bash
-git clone https://github.com/TheZakMan/PoolDiver
-cd PoolDiver
-pip install -r requirements.txt
+pip install git+https://github.com/TheZakMan/PoolDiver
+# or, from a local checkout:
+git clone https://github.com/TheZakMan/PoolDiver && cd PoolDiver
+pip install .          # add -e for an editable/dev install
 ```
 
-Requires Python 3.9+.
+**Or run straight from a checkout**, without installing:
+
+```bash
+git clone https://github.com/TheZakMan/PoolDiver && cd PoolDiver
+pip install boto3 rich
+./PoolDiver.py --help
+```
 
 ## Usage
 
+After a pip install, use the `pooldiver` command (equivalently
+`python -m pooldiver`, or `./PoolDiver.py` from a checkout):
+
 ```bash
 # Fetch credentials only
-./PoolDiver.py -r us-east-1 -id us-east-1:00000000-0000-0000-0000-000000000000
+pooldiver -r us-east-1 -id us-east-1:00000000-0000-0000-0000-000000000000
 
 # Fetch credentials and probe AWS service permissions
-./PoolDiver.py -r us-east-1 -id us-east-1:0000...0000 -t
+pooldiver -r us-east-1 -id us-east-1:0000...0000 -t
 
 # Probe a specific subset of services
-./PoolDiver.py -r us-east-1 -id us-east-1:0000...0000 -t -s s3,ec2,lambda
+pooldiver -r us-east-1 -id us-east-1:0000...0000 -t -s s3,ec2,lambda
 ```
 
 ### Options
@@ -50,6 +64,7 @@ Requires Python 3.9+.
 | `--no-enumerate` | Skip running `enumerate-iam` |
 | `--enumerate-path` | Path to the `enumerate-iam` directory |
 | `--output` | Custom output directory for results |
+| `-w`, `--workers` | Max parallel workers for probing (default: 5) |
 | `-v`, `--verbose` | Enable verbose logging |
 | `--version` | Show version |
 

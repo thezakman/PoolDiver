@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Optional
 
 import boto3
+from botocore import UNSIGNED
+from botocore.config import Config as BotoConfig
 from botocore.exceptions import BotoCoreError, ClientError
 
 from . import __version__
@@ -29,7 +31,13 @@ class PoolDiver:
         self.log.info(
             f"Fetching credentials for pool [bold]{identity_pool}[/] in [bold]{region}[/]"
         )
-        client = boto3.client("cognito-identity", region_name=region)
+        # The unauthenticated Cognito flow is public: issue unsigned requests so
+        # PoolDiver works even with no local AWS credentials configured.
+        client = boto3.client(
+            "cognito-identity",
+            region_name=region,
+            config=BotoConfig(signature_version=UNSIGNED),
+        )
 
         with console.status("[cyan]Requesting identity id...", spinner="dots"):
             identity_id = client.get_id(IdentityPoolId=identity_pool)["IdentityId"]

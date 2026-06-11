@@ -17,13 +17,14 @@ from .console import console
 from .core import PoolDiver
 from .logger import Log
 
-# us-east-1:<uuid>
+# AWS region, e.g. us-east-1, ap-southeast-2, us-gov-east-1, cn-north-1
+_REGION_RE = re.compile(r"^[a-z]{2}-[a-z-]+-\d+$")
+# Cognito Identity Pool ID: <region>:<uuid>
 _IDENTITY_RE = re.compile(
-    r"^[a-z]{2}-[a-z]+-\d+:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
+    r"^[a-z]{2}-[a-z-]+-\d+:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-"
     r"[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
 )
-_REGION_RE = re.compile(r"^[a-z]{2}-[a-z]+-\d+$")
 
 
 def parse_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:

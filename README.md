@@ -72,13 +72,24 @@ pooldiver -r us-east-1 -id us-east-1:0000...0000 -t -s s3,ec2,lambda
 
 ### enumerate-iam integration
 
-PoolDiver looks for `enumerate-iam` via the `--enumerate-path` flag or the
-`POOLDIVER_ENUMERATE_IAM` environment variable:
+PoolDiver **bundles** [`enumerate-iam`](https://github.com/andresriancho/enumerate-iam)
+(under [`pooldiver/_vendor/`](pooldiver/_vendor/)), so it works out of the box —
+no separate install needed. PoolDiver runs it as a separate subprocess.
+
+To use a different copy, override the location (this takes precedence over the
+bundled one):
 
 ```bash
-export POOLDIVER_ENUMERATE_IAM=~/Toolz/enumerate-iam
-./PoolDiver.py -r us-east-1 -id us-east-1:0000...0000 -t
+export POOLDIVER_ENUMERATE_IAM=~/path/to/enumerate-iam   # or use --enumerate-path
+pooldiver -r us-east-1 -id us-east-1:0000...0000 -t
 ```
+
+Resolution order: `--enumerate-path` → `POOLDIVER_ENUMERATE_IAM` → bundled copy
+→ common locations (`~/Toolz/enumerate-iam`, `~/tools/enumerate-iam`, …).
+
+> The bundled `enumerate-iam` is **GPLv3** (its license is preserved in
+> `pooldiver/_vendor/enumerate-iam/LICENSE`); PoolDiver itself is Apache 2.0.
+> See [`pooldiver/_vendor/README.md`](pooldiver/_vendor/README.md).
 
 ## Output
 

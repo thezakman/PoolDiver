@@ -33,6 +33,30 @@ class Config:
 
     @staticmethod
     def default_enumerate_path() -> Optional[Path]:
-        """Resolve the enumerate-iam location from the environment, if set."""
+        """Resolve the enumerate-iam location.
+
+        Order of precedence:
+          1. the POOLDIVER_ENUMERATE_IAM environment variable,
+          2. the copy bundled with PoolDiver (pooldiver/_vendor/enumerate-iam),
+          3. a few common install locations.
+
+        Returns the first directory that contains enumerate-iam.py, or None.
+        """
         env = os.environ.get(ENUMERATE_IAM_ENV)
-        return Path(env).expanduser() if env else None
+        if env:
+            return Path(env).expanduser()
+
+        from ._vendor import ENUMERATE_IAM_DIR
+
+        home = Path.home()
+        candidates = [
+            ENUMERATE_IAM_DIR,
+            home / "Toolz" / "enumerate-iam",
+            home / "tools" / "enumerate-iam",
+            home / "enumerate-iam",
+            Path.cwd() / "enumerate-iam",
+        ]
+        for path in candidates:
+            if (path / "enumerate-iam.py").is_file():
+                return path
+        return None

@@ -158,3 +158,20 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# === PoolDiver: sensitive output & generated data ===
+# Extracted AWS credentials — NEVER commit these
+credentials/
+# Scan results and reports
+pool_diver_results/
+# Runtime logs
+pooldiver_output.log
+*.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Local scratch / test input files
+example.txt

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import boto3
 from botocore import UNSIGNED
@@ -138,6 +139,7 @@ class PoolDiver:
 
         console.rule("[cyan]enumerate-iam output")
         proc: Optional[subprocess.Popen] = None
+        findings: List[str] = []
         try:
             with open(output_file, "w", encoding="utf-8") as f:
                 proc = subprocess.Popen(
@@ -146,6 +148,9 @@ class PoolDiver:
                 for raw in iter(proc.stdout.readline, b""):
                     line = raw.decode("utf-8", errors="replace").rstrip()
                     self._echo_enum_line(line)
+                    if "worked!" in line.lower():
+                        m = re.search(r"--\s*([\w.\-]+\([^)]*\))\s*worked", line)
+                        findings.append(m.group(1) if m else line.strip())
                     f.write(line + "\n")
                     f.flush()
                 proc.wait()
@@ -154,6 +159,13 @@ class PoolDiver:
             if proc.returncode != 0:
                 self.log.error(f"enumerate-iam exited with code {proc.returncode}")
                 return None
+            if findings:
+                self.log.good(
+                    f"enumerate-iam: {len(findings)} working call(s) — "
+                    + ", ".join(findings)
+                )
+            else:
+                self.log.info("enumerate-iam: no additional working calls found")
             self.log.good(f"enumerate-iam output saved to {output_file}")
             return output_file
         except KeyboardInterrupt:
@@ -168,11 +180,17 @@ class PoolDiver:
     @staticmethod
     def _echo_enum_line(line: str) -> None:
         low = line.lower()
-        if any(k in low for k in ("error", "denied", "failed")):
-            console.print(f"[red]{line}[/]")
+        if "worked!" in low:
+            style = "bold green"           # a permission that actually works
+        elif "not found" in low or "param validation error" in low:
+            style = "dim"                  # benign: API not in installed botocore
+        elif any(k in low for k in ("error", "denied", "failed")):
+            style = "red"
         elif any(k in low for k in ("success", "allowed", "completed")):
-            console.print(f"[green]{line}[/]")
+            style = "green"
         elif "warning" in low:
-            console.print(f"[yellow]{line}[/]")
+            style = "yellow"
         else:
-            console.print(line, markup=False, highlight=False)
+            style = None
+        # markup=False so '[ERROR]'/'[INFO]' in the line aren't parsed as tags.
+        console.print(line, style=style, markup=False, highlight=False)
